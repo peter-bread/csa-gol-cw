@@ -18,11 +18,8 @@ type distributorChannels struct {
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
 	filename := fmt.Sprintf("%vx%v", p.ImageWidth, p.ImageHeight)
-	fmt.Println("filename stored")
 	c.ioCommand <- ioInput
-	fmt.Println("command into chan")
 	c.ioFilename <- filename
-	fmt.Println("filename into chan")
 
 	// TODO: Create a 2D slice to store the world.
 	world := make([][]byte, p.ImageHeight)
