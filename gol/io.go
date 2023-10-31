@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
 	"uk.ac.bris.cs/gameoflife/util"
 )
 
