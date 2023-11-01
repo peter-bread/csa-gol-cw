@@ -35,10 +35,32 @@ func distributor(p Params, c distributorChannels) {
 
 	turn := 0
 
+	// initialise worker channels
+	workers := make([]chan [][]byte, p.Threads)
+	for i := 0; i < p.Threads; i++ {
+		workers[i] = make(chan [][]byte)
+	}
+
+	height := p.ImageHeight / p.Threads
 	// TODO: Execute all turns of the Game of Life.
 	for ; turn < p.Turns; turn++ {
-		// start worker goroutines here
-		world = calculateNextState(p, world)
+
+		startY := 0
+		// start workers
+		for i := 0; i < p.Threads; i++ {
+			// go worker(p.ImageHeight, p.ImageWidth, world, workers[i])
+			go worker(startY, startY+height, 0, p.ImageWidth, world, workers[i])
+			startY += height
+		}
+
+		var newWorld [][]byte
+
+		// reassemble world
+		for i := 0; i < p.Threads; i++ {
+			newWorld = append(newWorld, <-workers[i]...)
+		}
+		// world = newWorld
+		copy(world, newWorld)
 	}
 
 	// TODO: Report the final state using FinalTurnCompleteEvent.
@@ -58,18 +80,21 @@ func distributor(p Params, c distributorChannels) {
 	close(c.events)
 }
 
-func calculateNextState(p Params, world [][]byte) [][]byte {
+func worker(startY, endY, startX, endX int, world [][]byte, out chan<- [][]byte) {
+	//TODO: implement worker (more paramenters needed)
+	out <- calculateNextState(endY-startY, endX-startX, world)
+}
+
+func calculateNextState(height, width int, world [][]byte) [][]byte {
 	//   world[ row ][ col ]
 	//      up/down    left/right
-
-	newWorld := make([][]byte, p.ImageHeight)
+	newWorld := make([][]byte, height)
 	for i := range newWorld {
-		newWorld[i] = make([]byte, p.ImageWidth)
+		newWorld[i] = make([]byte, width)
 	}
 
-	for rowI, row := range world { // for each row of the grid
+	for rowI, row := range world[:height] { // for each row of the grid
 		for colI, cellVal := range row { // for each cell in the row
-
 			aliveNeighbours := 0 // initially there are 0 living neighbours
 
 			// iterate through neighbours
@@ -80,8 +105,8 @@ func calculateNextState(p Params, world [][]byte) [][]byte {
 					if i != 0 || j != 0 {
 
 						// Calculate neighbour coordinates with wrapping
-						neighbourRow := (rowI + i + p.ImageHeight) % p.ImageHeight
-						neighbourCol := (colI + j + p.ImageWidth) % p.ImageWidth
+						neighbourRow := (rowI + i + height) % height
+						neighbourCol := (colI + j + width) % width
 
 						// Check if the wrapped neighbour is alive
 						if world[neighbourRow][neighbourCol] == 255 {
