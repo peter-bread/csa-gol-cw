@@ -21,7 +21,7 @@ func distributor(p Params, c distributorChannels) {
 	c.ioCommand <- ioInput
 	c.ioFilename <- filename
 
-	// TODO: Create a 2D slice to store the world.
+	// Create a 2D slice to store the world.
 	world := make([][]byte, p.ImageHeight)
 	for i := range world {
 		world[i] = make([]byte, p.ImageWidth)
@@ -41,15 +41,19 @@ func distributor(p Params, c distributorChannels) {
 		workers[i] = make(chan [][]byte)
 	}
 
-	height := p.ImageHeight / p.Threads
-	// TODO: Execute all turns of the Game of Life.
+	// Execute all turns of the Game of Life.
 	for ; turn < p.Turns; turn++ {
 
+		height := p.ImageHeight / p.Threads
 		startY := 0
+
 		// start workers
 		for i := 0; i < p.Threads; i++ {
-			// go worker(p.ImageHeight, p.ImageWidth, world, workers[i])
-			go worker(startY, startY+height, 0, p.ImageWidth, world, workers[i])
+			// handle #threads that doesn't divide into image size
+			if i == p.Threads-1 && p.ImageHeight%p.Threads != 0 {
+				height = p.ImageHeight - startY
+			}
+			go worker(startY, startY+height, 0, p.ImageWidth, p.ImageHeight, p.ImageWidth, world, workers[i])
 			startY += height
 		}
 
@@ -59,11 +63,12 @@ func distributor(p Params, c distributorChannels) {
 		for i := 0; i < p.Threads; i++ {
 			newWorld = append(newWorld, <-workers[i]...)
 		}
-		// world = newWorld
+
+		// replace world with new world
 		copy(world, newWorld)
 	}
 
-	// TODO: Report the final state using FinalTurnCompleteEvent.
+	// Report the final state using FinalTurnCompleteEvent.
 	alive := calculateAliveCells(p, world)
 	c.events <- FinalTurnComplete{
 		CompletedTurns: turn,
@@ -80,20 +85,23 @@ func distributor(p Params, c distributorChannels) {
 	close(c.events)
 }
 
-func worker(startY, endY, startX, endX int, world [][]byte, out chan<- [][]byte) {
-	//TODO: implement worker (more paramenters needed)
-	out <- calculateNextState(endY-startY, endX-startX, world)
+func worker(startY, endY, startX, endX, world_height, world_width int, world [][]byte, out chan<- [][]byte) {
+	out <- calculateNextState(startY, endY, startX, endX, world_height, world_width, world)
 }
 
-func calculateNextState(height, width int, world [][]byte) [][]byte {
+func calculateNextState(startY, endY, startX, endX, world_height, world_width int, world [][]byte) [][]byte {
 	//   world[ row ][ col ]
-	//      up/down    left/right
+	//      up/down   left/right
+
+	height := endY - startY
+	width := endX - startX
+
 	newWorld := make([][]byte, height)
 	for i := range newWorld {
 		newWorld[i] = make([]byte, width)
 	}
 
-	for rowI, row := range world[:height] { // for each row of the grid
+	for rowI, row := range world[startY:endY] { // for each row of the grid
 		for colI, cellVal := range row { // for each cell in the row
 			aliveNeighbours := 0 // initially there are 0 living neighbours
 
@@ -105,8 +113,8 @@ func calculateNextState(height, width int, world [][]byte) [][]byte {
 					if i != 0 || j != 0 {
 
 						// Calculate neighbour coordinates with wrapping
-						neighbourRow := (rowI + i + height) % height
-						neighbourCol := (colI + j + width) % width
+						neighbourRow := (rowI + i + startY + world_height) % world_height
+						neighbourCol := (colI + j + world_width) % world_width
 
 						// Check if the wrapped neighbour is alive
 						if world[neighbourRow][neighbourCol] == 255 {
@@ -115,15 +123,16 @@ func calculateNextState(height, width int, world [][]byte) [][]byte {
 					}
 				}
 			}
+
 			// implement rules
 			if cellVal == 255 && aliveNeighbours < 2 { // cell is lonely and dies
-				newWorld[rowI][colI] = 0
+				newWorld[(rowI)][colI] = 0
 			} else if cellVal == 255 && aliveNeighbours > 3 { // cell killed by overpopulation
 				newWorld[rowI][colI] = 0
 			} else if cellVal == 0 && aliveNeighbours == 3 { // new cell is born
 				newWorld[rowI][colI] = 255
 			} else { // cell remains as it is
-				newWorld[rowI][colI] = world[rowI][colI]
+				newWorld[rowI][colI] = world[rowI+startY][colI+startX]
 			}
 		}
 	}
