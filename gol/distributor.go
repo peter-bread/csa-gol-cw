@@ -41,20 +41,18 @@ func distributor(p Params, c distributorChannels) {
 		workers[i] = make(chan [][]byte)
 	}
 
+	// split heights as evenly as possible
+	heights := calcHeights(p.ImageHeight, p.Threads)
+
 	// Execute all turns of the Game of Life.
 	for ; turn < p.Turns; turn++ {
 
-		height := p.ImageHeight / p.Threads
 		startY := 0
 
 		// start workers
 		for i := 0; i < p.Threads; i++ {
-			// handle #threads that doesn't divide into image size
-			if i == p.Threads-1 && p.ImageHeight%p.Threads != 0 {
-				height = p.ImageHeight - startY
-			}
-			go worker(startY, startY+height, 0, p.ImageWidth, p.ImageHeight, p.ImageWidth, world, workers[i])
-			startY += height
+			go worker(startY, startY+heights[i], 0, p.ImageWidth, p.ImageHeight, p.ImageWidth, world, workers[i])
+			startY += heights[i]
 		}
 
 		var newWorld [][]byte
@@ -83,6 +81,22 @@ func distributor(p Params, c distributorChannels) {
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
+}
+
+func calcHeights(imageHeight, threads int) []int {
+	baseHeight := imageHeight / threads
+	remainder := imageHeight % threads
+	heights := make([]int, threads)
+
+	for i := 0; i < threads; i++ {
+		if remainder > 0 { // distribute the remainder as evenly as possible
+			heights[i] = baseHeight + 1
+			remainder--
+		} else {
+			heights[i] = baseHeight
+		}
+	}
+	return heights
 }
 
 func worker(startY, endY, startX, endX, world_height, world_width int, world [][]byte, out chan<- [][]byte) {
@@ -126,7 +140,7 @@ func calculateNextState(startY, endY, startX, endX, world_height, world_width in
 
 			// implement rules
 			if cellVal == 255 && aliveNeighbours < 2 { // cell is lonely and dies
-				newWorld[(rowI)][colI] = 0
+				newWorld[rowI][colI] = 0
 			} else if cellVal == 255 && aliveNeighbours > 3 { // cell killed by overpopulation
 				newWorld[rowI][colI] = 0
 			} else if cellVal == 0 && aliveNeighbours == 3 { // new cell is born
