@@ -99,6 +99,17 @@ func distributor(p Params, c distributorChannels) {
 		Alive:          alive,
 	}
 
+	// after all turns send state of board to be outputted as a .pgm image
+	filename = fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, p.Turns)
+	c.ioCommand <- ioOutput
+	c.ioFilename <- filename
+
+	for y := 0; y < p.ImageHeight; y++ {
+		for x := 0; x < p.ImageWidth; x++ {
+			c.ioOutput <- world[y][x]
+		}
+	}
+
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
