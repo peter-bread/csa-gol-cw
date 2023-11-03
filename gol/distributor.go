@@ -2,6 +2,7 @@ package gol
 
 import (
 	"fmt"
+	"time"
 
 	"uk.ac.bris.cs/gameoflife/util"
 )
@@ -44,6 +45,22 @@ func distributor(p Params, c distributorChannels) {
 	// split heights as evenly as possible
 	heights := calcHeights(p.ImageHeight, p.Threads)
 
+	// create ticker that ticks every 2 seconds
+	ticker := time.NewTicker(2 * time.Second)
+
+	// start ticker and send AliveCellsCount events
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				c.events <- AliveCellsCount{
+					CompletedTurns: turn,
+					CellsCount:     len(calculateAliveCells(p, world)),
+				}
+			}
+		}
+	}()
+
 	// Execute all turns of the Game of Life.
 	for ; turn < p.Turns; turn++ {
 
@@ -64,7 +81,16 @@ func distributor(p Params, c distributorChannels) {
 
 		// replace world with new world
 		copy(world, newWorld)
+
+		// send TurnComplete event after each turn
+		c.events <- TurnComplete{
+			CompletedTurns: turn + 1,
+		}
+
 	}
+
+	// stop ticker after all turns executed
+	ticker.Stop()
 
 	// Report the final state using FinalTurnCompleteEvent.
 	alive := calculateAliveCells(p, world)
@@ -77,6 +103,7 @@ func distributor(p Params, c distributorChannels) {
 	c.ioCommand <- ioCheckIdle
 	<-c.ioIdle
 
+	// send StateChange event to announce GoL is ended
 	c.events <- StateChange{turn, Quitting}
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
