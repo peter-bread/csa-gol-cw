@@ -2,6 +2,7 @@ package gol
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"uk.ac.bris.cs/gameoflife/util"
@@ -15,6 +16,8 @@ type distributorChannels struct {
 	ioOutput   chan<- uint8
 	ioInput    <-chan uint8
 }
+
+var mutex sync.Mutex
 
 // distributor divides the work between workers and interacts with other goroutines.
 func distributor(p Params, c distributorChannels) {
@@ -31,6 +34,13 @@ func distributor(p Params, c distributorChannels) {
 	for i := 0; i < p.ImageHeight; i++ {
 		for j := 0; j < p.ImageWidth; j++ {
 			world[i][j] = <-c.ioInput
+			// send CellFlipped events for initially alive cells
+			if world[i][j] == 255 {
+				c.events <- CellFlipped{
+					CompletedTurns: 0,
+					Cell:           util.Cell{X: j, Y: i},
+				}
+			}
 		}
 	}
 
@@ -79,14 +89,27 @@ func distributor(p Params, c distributorChannels) {
 			newWorld = append(newWorld, <-workers[i]...)
 		}
 
+		// send CellFlipped events for all cells that changed state
+		for y := 0; y < p.ImageHeight; y++ {
+			for x := 0; x < p.ImageWidth; x++ {
+				if world[y][x] != newWorld[y][x] {
+					c.events <- CellFlipped{
+						CompletedTurns: turn + 1,
+						Cell:           util.Cell{X: x, Y: y},
+					}
+				}
+			}
+		}
+
 		// replace world with new world
+		mutex.Lock()
 		copy(world, newWorld)
+		mutex.Unlock()
 
 		// send TurnComplete event after each turn
 		c.events <- TurnComplete{
 			CompletedTurns: turn + 1,
 		}
-
 	}
 
 	// stop ticker after all turns executed
@@ -121,6 +144,7 @@ func distributor(p Params, c distributorChannels) {
 	close(c.events)
 }
 
+// calculates the most even distribution of heights for splitting the world
 func calcHeights(imageHeight, threads int) []int {
 	baseHeight := imageHeight / threads
 	remainder := imageHeight % threads
@@ -192,6 +216,8 @@ func calculateNextState(startY, endY, startX, endX, world_height, world_width in
 }
 
 func calculateAliveCells(p Params, world [][]byte) []util.Cell {
+	mutex.Lock()
+	defer mutex.Unlock()
 	aliveCells := make([]util.Cell, 0, p.ImageHeight*p.ImageWidth)
 	for rowI, row := range world {
 		for colI, cellVal := range row {
