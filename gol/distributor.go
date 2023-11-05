@@ -15,6 +15,7 @@ type distributorChannels struct {
 	ioFilename chan<- string
 	ioOutput   chan<- uint8
 	ioInput    <-chan uint8
+	keyPresses <-chan rune
 }
 
 var mutex sync.Mutex
@@ -73,6 +74,21 @@ func distributor(p Params, c distributorChannels) {
 
 	// Execute all turns of the Game of Life.
 	for ; turn < p.Turns; turn++ {
+		key := <-c.keyPresses
+		switch key {
+		case 's':
+			generatePGM(p, c, world)
+		case 'q':
+			generatePGM(p, c, world)
+			break
+		case 'p':
+			fmt.Printf("Current turn is: %v\n", turn)
+			key = <-c.keyPresses
+			switch key {
+			case 'p':
+				fmt.Println("Continuing")
+			}
+		}
 
 		startY := 0
 
@@ -122,16 +138,7 @@ func distributor(p Params, c distributorChannels) {
 		Alive:          alive,
 	}
 
-	// after all turns send state of board to be outputted as a .pgm image
-	filename = fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, p.Turns)
-	c.ioCommand <- ioOutput
-	c.ioFilename <- filename
-
-	for y := 0; y < p.ImageHeight; y++ {
-		for x := 0; x < p.ImageWidth; x++ {
-			c.ioOutput <- world[y][x]
-		}
-	}
+	generatePGM(p, c, world)
 
 	// Make sure that the Io has finished any output before exiting.
 	c.ioCommand <- ioCheckIdle
@@ -227,4 +234,17 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 		}
 	}
 	return aliveCells
+}
+
+func generatePGM(p Params, c distributorChannels, world [][]byte) {
+	// after all turns send state of board to be outputted as a .pgm image
+	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, p.Turns)
+	c.ioCommand <- ioOutput
+	c.ioFilename <- filename
+
+	for y := 0; y < p.ImageHeight; y++ {
+		for x := 0; x < p.ImageWidth; x++ {
+			c.ioOutput <- world[y][x]
+		}
+	}
 }
