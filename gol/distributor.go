@@ -73,21 +73,28 @@ func distributor(p Params, c distributorChannels) {
 	}()
 
 	// Execute all turns of the Game of Life.
-	for ; turn < p.Turns; turn++ {
-		key := <-c.keyPresses
-		switch key {
-		case 's':
-			generatePGM(p, c, world)
-		case 'q':
-			generatePGM(p, c, world)
-			break
-		case 'p':
-			fmt.Printf("Current turn is: %v\n", turn)
-			key = <-c.keyPresses
-			switch key {
-			case 'p':
-				fmt.Println("Continuing")
-			}
+	exitLoop := false
+	for ; turn < p.Turns && !exitLoop; turn++ {
+
+		// only start one goroutine for listening for keypresses
+		if turn == 0 {
+			go func() {
+				for {
+					select {
+					case key := <-c.keyPresses:
+						switch key {
+						case 's':
+							generatePGM(p, c, world)
+						case 'q':
+							generatePGM(p, c, world)
+							exitLoop = true
+							// TODO: make sure goroutine exits properly
+						case 'p':
+							// TODO: pause/resume functionality
+						}
+					}
+				}
+			}()
 		}
 
 		startY := 0
@@ -98,6 +105,7 @@ func distributor(p Params, c distributorChannels) {
 			startY += heights[i]
 		}
 
+		// store next state here
 		var newWorld [][]byte
 
 		// reassemble world
@@ -106,6 +114,7 @@ func distributor(p Params, c distributorChannels) {
 		}
 
 		// send CellFlipped events for all cells that changed state
+		// ? maybe pass event channel into calculateNextState and send events from in there (probably more efficient)
 		for y := 0; y < p.ImageHeight; y++ {
 			for x := 0; x < p.ImageWidth; x++ {
 				if world[y][x] != newWorld[y][x] {
@@ -238,9 +247,14 @@ func calculateAliveCells(p Params, world [][]byte) []util.Cell {
 
 func generatePGM(p Params, c distributorChannels, world [][]byte) {
 	// after all turns send state of board to be outputted as a .pgm image
+
 	filename := fmt.Sprintf("%vx%vx%v", p.ImageWidth, p.ImageHeight, p.Turns)
 	c.ioCommand <- ioOutput
 	c.ioFilename <- filename
+
+	// lock world while it is being read from
+	mutex.Lock()
+	defer mutex.Unlock()
 
 	for y := 0; y < p.ImageHeight; y++ {
 		for x := 0; x < p.ImageWidth; x++ {
