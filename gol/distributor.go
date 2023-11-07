@@ -92,7 +92,12 @@ func distributor(p Params, c distributorChannels) {
 							exitLoop = true
 							break keysLoop
 						case 'p':
-							paused = true
+							if !paused {
+								paused = true
+							} else {
+								paused = false
+							}
+
 						}
 					}
 				}
@@ -102,13 +107,10 @@ func distributor(p Params, c distributorChannels) {
 		if paused {
 		pauseLoop:
 			for {
-				select {
-				case key := <-c.keyPresses:
-					switch key {
-					case 'p':
-						paused = false
-						break pauseLoop
-					}
+				fmt.Println("hi")
+				if !paused {
+					fmt.Println("hello")
+					break pauseLoop
 				}
 			}
 		}
