@@ -74,6 +74,7 @@ func distributor(p Params, c distributorChannels) {
 
 	// Execute all turns of the Game of Life.
 	exitLoop := false
+	paused := false
 	for ; turn < p.Turns && !exitLoop; turn++ {
 
 		// only start one goroutine for listening for keypresses
@@ -90,13 +91,26 @@ func distributor(p Params, c distributorChannels) {
 							generatePGM(p, c, world)
 							exitLoop = true
 							break keysLoop
-							// TODO: make sure goroutine exits properly
 						case 'p':
-							// TODO: pause/resume functionality
+							paused = true
 						}
 					}
 				}
 			}()
+		}
+
+		if paused {
+		pauseLoop:
+			for {
+				select {
+				case key := <-c.keyPresses:
+					switch key {
+					case 'p':
+						paused = false
+						break pauseLoop
+					}
+				}
+			}
 		}
 
 		if exitLoop {
