@@ -89,6 +89,7 @@ func distributor(p Params, c distributorChannels) {
 							generatePGM(p, c, world)
 						case 'q':
 							generatePGM(p, c, world)
+							c.events <- StateChange{turn, Quitting}
 							exitLoop = true
 							break keysLoop
 						case 'p':
@@ -105,24 +106,6 @@ func distributor(p Params, c distributorChannels) {
 					}
 				}
 			}()
-		}
-
-		// if paused {
-		// pauseLoop:
-		// 	for {
-		// 		select {
-		// 		case key := <-c.keyPresses:
-		// 			switch key {
-		// 			case 'p':
-		// 				paused = false
-		// 				break pauseLoop
-		// 			}
-		// 		}
-		// 	}
-		// }
-
-		if exitLoop {
-			break
 		}
 
 		startY := 0
