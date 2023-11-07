@@ -79,6 +79,7 @@ func distributor(p Params, c distributorChannels) {
 		// only start one goroutine for listening for keypresses
 		if turn == 0 {
 			go func() {
+			keysLoop:
 				for {
 					select {
 					case key := <-c.keyPresses:
@@ -88,6 +89,7 @@ func distributor(p Params, c distributorChannels) {
 						case 'q':
 							generatePGM(p, c, world)
 							exitLoop = true
+							break keysLoop
 							// TODO: make sure goroutine exits properly
 						case 'p':
 							// TODO: pause/resume functionality
@@ -95,6 +97,10 @@ func distributor(p Params, c distributorChannels) {
 					}
 				}
 			}()
+		}
+
+		if exitLoop {
+			break
 		}
 
 		startY := 0
