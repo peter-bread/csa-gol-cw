@@ -75,37 +75,46 @@ func distributor(p Params, c distributorChannels) {
 	// Execute all turns of the Game of Life.
 	exitLoop := false
 	paused := false
-	for ; turn < p.Turns && !exitLoop; turn++ {
+	restartSignal := make(chan bool)
 
-		// only start one goroutine for listening for keypresses
-		if turn == 0 {
-			go func() {
-			keysLoop:
-				for {
-					select {
-					case key := <-c.keyPresses:
-						switch key {
-						case 's':
-							generatePGM(p, c, world)
-						case 'q':
-							generatePGM(p, c, world)
-							c.events <- StateChange{turn, Quitting}
-							exitLoop = true
-							break keysLoop
-						case 'p':
-							// toggle paused
-							paused = !paused
-							if paused {
-								ticker.Stop()                         // stop ticker
-								c.events <- StateChange{turn, Paused} // send pause event
-							} else {
-								ticker.Reset(2 * time.Second)            // restart ticker
-								c.events <- StateChange{turn, Executing} // send execute event
-							}
-						}
+	go func() {
+	keysLoop:
+		for {
+			select {
+			case key := <-c.keyPresses:
+				switch key {
+				case 's':
+					generatePGM(p, c, world)
+				case 'q':
+					generatePGM(p, c, world)
+					c.events <- StateChange{turn, Quitting}
+					exitLoop = true
+					break keysLoop
+				case 'p':
+					// toggle paused
+					paused = !paused
+					if paused {
+						ticker.Stop()                         // stop ticker
+						c.events <- StateChange{turn, Paused} // send pause event
+					} else {
+						ticker.Reset(2 * time.Second)                // restart ticker
+						c.events <- StateChange{turn - 1, Executing} // send execute event
+						restartSignal <- true
 					}
 				}
-			}()
+			}
+		}
+	}()
+
+	for ; turn < p.Turns && !exitLoop; turn++ {
+
+		// if paused wait for restart signal
+		if paused {
+			waiting := true
+			for waiting {
+				<-restartSignal
+				waiting = false
+			}
 		}
 
 		startY := 0
@@ -169,6 +178,10 @@ func distributor(p Params, c distributorChannels) {
 
 	// Close the channel to stop the SDL goroutine gracefully. Removing may cause deadlock.
 	close(c.events)
+}
+
+func keyPressListener(turn int, p Params, c distributorChannels, world [][]byte) {
+
 }
 
 // calculates the most even distribution of heights for splitting the world
