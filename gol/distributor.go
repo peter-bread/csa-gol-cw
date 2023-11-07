@@ -72,11 +72,12 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}()
 
-	// Execute all turns of the Game of Life.
+	// variables to handle keypress events
 	exitLoop := false
 	paused := false
 	restartSignal := make(chan bool)
 
+	// listen for keypresses
 	go func() {
 	keysLoop:
 		for {
@@ -91,14 +92,13 @@ func distributor(p Params, c distributorChannels) {
 					exitLoop = true
 					break keysLoop
 				case 'p':
-					// toggle paused
-					paused = !paused
+					paused = !paused // toggle paused
 					if paused {
 						ticker.Stop()                         // stop ticker
 						c.events <- StateChange{turn, Paused} // send pause event
 					} else {
 						ticker.Reset(2 * time.Second)                // restart ticker
-						c.events <- StateChange{turn - 1, Executing} // send execute event
+						c.events <- StateChange{turn - 1, Executing} // send execute event (have to subtract 1 due to next iteration of already execution starting)
 						restartSignal <- true
 					}
 				}
@@ -106,6 +106,7 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}()
 
+	// Execute all turns of the Game of Life.
 	for ; turn < p.Turns && !exitLoop; turn++ {
 
 		// if paused wait for restart signal
@@ -180,10 +181,6 @@ func distributor(p Params, c distributorChannels) {
 	close(c.events)
 }
 
-func keyPressListener(turn int, p Params, c distributorChannels, world [][]byte) {
-
-}
-
 // calculates the most even distribution of heights for splitting the world
 func calcHeights(imageHeight, threads int) []int {
 	baseHeight := imageHeight / threads
@@ -201,6 +198,7 @@ func calcHeights(imageHeight, threads int) []int {
 	return heights
 }
 
+// worker that calculates next state for a section of the world
 func worker(startY, endY, startX, endX, world_height, world_width int, world [][]byte, out chan<- [][]byte) {
 	out <- calculateNextState(startY, endY, startX, endX, world_height, world_width, world)
 }
