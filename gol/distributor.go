@@ -92,26 +92,34 @@ func distributor(p Params, c distributorChannels) {
 							exitLoop = true
 							break keysLoop
 						case 'p':
-							paused = true
+							// toggle paused
+							paused = !paused
+							if paused {
+								ticker.Stop()                         // stop ticker
+								c.events <- StateChange{turn, Paused} // send pause event
+							} else {
+								ticker.Reset(2 * time.Second)            // restart ticker
+								c.events <- StateChange{turn, Executing} // send execute event
+							}
 						}
 					}
 				}
 			}()
 		}
 
-		if paused {
-		pauseLoop:
-			for {
-				select {
-				case key := <-c.keyPresses:
-					switch key {
-					case 'p':
-						paused = false
-						break pauseLoop
-					}
-				}
-			}
-		}
+		// if paused {
+		// pauseLoop:
+		// 	for {
+		// 		select {
+		// 		case key := <-c.keyPresses:
+		// 			switch key {
+		// 			case 'p':
+		// 				paused = false
+		// 				break pauseLoop
+		// 			}
+		// 		}
+		// 	}
+		// }
 
 		if exitLoop {
 			break
