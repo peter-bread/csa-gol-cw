@@ -72,51 +72,50 @@ func distributor(p Params, c distributorChannels) {
 		}
 	}()
 
-	// Execute all turns of the Game of Life.
+	// variables to handle keypress events
 	exitLoop := false
 	paused := false
-	for ; turn < p.Turns && !exitLoop; turn++ {
+	restartSignal := make(chan bool)
 
-		// only start one goroutine for listening for keypresses
-		if turn == 0 {
-			go func() {
-			keysLoop:
-				for {
-					select {
-					case key := <-c.keyPresses:
-						switch key {
-						case 's':
-							generatePGM(p, c, world)
-						case 'q':
-							generatePGM(p, c, world)
-							exitLoop = true
-							break keysLoop
-						case 'p':
-							if !paused {
-								paused = true
-							} else {
-								paused = false
-							}
-
-						}
+	// listen for keypresses
+	go func() {
+	keysLoop:
+		for {
+			select {
+			case key := <-c.keyPresses:
+				switch key {
+				case 's':
+					generatePGM(p, c, world)
+				case 'q':
+					generatePGM(p, c, world)
+					c.events <- StateChange{turn, Quitting}
+					exitLoop = true
+					break keysLoop
+				case 'p':
+					paused = !paused // toggle paused
+					if paused {
+						ticker.Stop()                         // stop ticker
+						c.events <- StateChange{turn, Paused} // send pause event
+					} else {
+						ticker.Reset(2 * time.Second)                // restart ticker
+						c.events <- StateChange{turn - 1, Executing} // send execute event (have to subtract 1 due to next iteration of already execution starting)
+						restartSignal <- true
 					}
-				}
-			}()
-		}
-
-		if paused {
-		pauseLoop:
-			for {
-				fmt.Println("hi")
-				if !paused {
-					fmt.Println("hello")
-					break pauseLoop
 				}
 			}
 		}
+	}()
 
-		if exitLoop {
-			break
+	// Execute all turns of the Game of Life.
+	for ; turn < p.Turns && !exitLoop; turn++ {
+
+		// if paused wait for restart signal
+		if paused {
+			waiting := true
+			for waiting {
+				<-restartSignal
+				waiting = false
+			}
 		}
 
 		startY := 0
@@ -199,6 +198,7 @@ func calcHeights(imageHeight, threads int) []int {
 	return heights
 }
 
+// worker that calculates next state for a section of the world
 func worker(startY, endY, startX, endX, world_height, world_width int, world [][]byte, out chan<- [][]byte) {
 	out <- calculateNextState(startY, endY, startX, endX, world_height, world_width, world)
 }
