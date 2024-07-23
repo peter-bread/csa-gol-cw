@@ -61,13 +61,10 @@ func distributor(p Params, c distributorChannels) {
 
 	// start ticker and send AliveCellsCount events
 	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				c.events <- AliveCellsCount{
-					CompletedTurns: turn,
-					CellsCount:     len(calculateAliveCells(p, world)),
-				}
+		for range ticker.C {
+			c.events <- AliveCellsCount{
+				CompletedTurns: turn,
+				CellsCount:     len(calculateAliveCells(p, world)),
 			}
 		}
 	}()
@@ -80,27 +77,24 @@ func distributor(p Params, c distributorChannels) {
 	// listen for keypresses
 	go func() {
 	keysLoop:
-		for {
-			select {
-			case key := <-c.keyPresses:
-				switch key {
-				case 's':
-					generatePGM(p, c, world)
-				case 'q':
-					generatePGM(p, c, world)
-					c.events <- StateChange{turn, Quitting}
-					exitLoop = true
-					break keysLoop
-				case 'p':
-					paused = !paused // toggle paused
-					if paused {
-						ticker.Stop()                         // stop ticker
-						c.events <- StateChange{turn, Paused} // send pause event
-					} else {
-						ticker.Reset(2 * time.Second)                // restart ticker
-						c.events <- StateChange{turn - 1, Executing} // send execute event (have to subtract 1 due to next iteration of already execution starting)
-						restartSignal <- true
-					}
+		for key := range c.keyPresses {
+			switch key {
+			case 's':
+				generatePGM(p, c, world)
+			case 'q':
+				generatePGM(p, c, world)
+				c.events <- StateChange{turn, Quitting}
+				exitLoop = true
+				break keysLoop
+			case 'p':
+				paused = !paused // toggle paused
+				if paused {
+					ticker.Stop()                         // stop ticker
+					c.events <- StateChange{turn, Paused} // send pause event
+				} else {
+					ticker.Reset(2 * time.Second)                // restart ticker
+					c.events <- StateChange{turn - 1, Executing} // send execute event (have to subtract 1 due to next iteration of already execution starting)
+					restartSignal <- true
 				}
 			}
 		}
@@ -222,7 +216,6 @@ func calculateNextState(startY, endY, startX, endX, world_height, world_width in
 			// iterate through neighbours
 			for i := -1; i < 2; i++ {
 				for j := -1; j < 2; j++ {
-
 					// if cell is a neighbour (i.e. not the cell having its neighbours checked)
 					if i != 0 || j != 0 {
 
